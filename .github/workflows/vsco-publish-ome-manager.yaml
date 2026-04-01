@@ -1,15 +1,17 @@
 # =============================================================================
 # VSCO FORK ONLY — REMOVE BEFORE OPENING A PR TO sgl-project/ome
 #
-# This workflow builds dockerfiles/manager.Dockerfile and pushes to:
+# This workflow builds dockerfiles/manager.Dockerfile and pushes ONLY to:
 #   ghcr.io/vsco/ome-manager:<tag>
+# (Not ghcr.io/moirai-internal — that is upstream Makefile / other workflows.)
 #
 # Delete this entire file when upstreaming your fork (or keep it only on a
 # long-lived internal branch). Upstream does not need VSCO registry automation.
 #
 # Usage:
 #   Actions → "VSCO (fork): publish ome-manager to ghcr.io/vsco" → Run workflow
-#   Set "image_tag" (e.g. v0.1.4-vsco2) or leave default to use short SHA.
+#   Default tag matches local manual pushes: v0.1.4-vsco1. Override "image_tag"
+#   for a new release, or clear it to use git short SHA instead.
 #
 # Auth: default GITHUB_TOKEN usually works for packages:write in the vsco org.
 #       If pushes fail with 403, add a repo secret VSCO_GHCR_TOKEN (PAT with
@@ -24,7 +26,7 @@ on:
       image_tag:
         description: 'Tag for ghcr.io/vsco/ome-manager (empty = git short SHA)'
         required: false
-        default: ''
+        default: 'v0.1.4-vsco1'
 
 permissions:
   contents: read
@@ -52,7 +54,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to ghcr.io (org vsco packages)
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -63,13 +65,12 @@ jobs:
       - name: Compute image tag
         id: tag
         run: |
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            TAG="${{ inputs.image_tag }}"
-          else
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
             TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Publishing ${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAME}:${TAG}"
+          echo "Publishing to ghcr.io/vsco → ${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAME}:${TAG}"
 
       - name: Build and push ome-manager (linux/amd64)
         uses: docker/build-push-action@v7
