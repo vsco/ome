@@ -2,5 +2,6 @@ apiVersion: v2
 name: ome-resources
 description: OME Resources and Controller
 type: application
-version: 0.1.0
-appVersion: "1.16.0"
+# Helm chart version: strict semver (no leading v). Keep in sync with release / VSCO publish workflows.
+version: 0.1.4
+appVersion: "v0.1.4-vsco1"

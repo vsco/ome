@@ -2,8 +2,8 @@ apiVersion: v2
 name: ome-serving
 description: OME Model Serving - ClusterBaseModels, ClusterServingRuntimes, and InferenceServices
 type: application
-version: 0.1.0
-appVersion: "1.0.0"
+version: 0.1.4
+appVersion: "v0.1.4-vsco1"
 keywords:
   - ome
   - inference
