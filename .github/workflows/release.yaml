@@ -142,7 +142,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update chart versions
         run: |
@@ -267,16 +267,16 @@ jobs:
           
           \`\`\`bash
           # OME Manager
-          docker pull ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }}
+          docker pull ghcr.io/vsco/ome-manager:${{ needs.prepare.outputs.tag }}
           
           # Model Agent
-          docker pull ghcr.io/moirai-internal/model-agent:${{ needs.prepare.outputs.tag }}
+          docker pull ghcr.io/vsco/model-agent:${{ needs.prepare.outputs.tag }}
           
           # OME Agent
-          docker pull ghcr.io/moirai-internal/ome-agent:${{ needs.prepare.outputs.tag }}
+          docker pull ghcr.io/vsco/ome-agent:${{ needs.prepare.outputs.tag }}
           
           # Multinode Prober
-          docker pull ghcr.io/moirai-internal/multinode-prober:${{ needs.prepare.outputs.tag }}
+          docker pull ghcr.io/vsco/multinode-prober:${{ needs.prepare.outputs.tag }}
           \`\`\`
           
           ## ⎈ Helm Installation
@@ -285,8 +285,8 @@ jobs:
           
           \`\`\`bash
           # Install directly from OCI registry
-          helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --version ${{ needs.prepare.outputs.version }} --namespace ome --create-namespace
-          helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --version ${{ needs.prepare.outputs.version }} --namespace ome
+          helm install ome-crd oci://ghcr.io/vsco/charts/ome-crd --version ${{ needs.prepare.outputs.version }} --namespace ome --create-namespace
+          helm install ome oci://ghcr.io/vsco/charts/ome-resources --version ${{ needs.prepare.outputs.version }} --namespace ome
           \`\`\`
           
           ### Option 2: GitHub Releases
@@ -316,7 +316,7 @@ jobs:
           All container images are signed with cosign. Verify with:
           
           \`\`\`bash
-          cosign verify ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }} \
+          cosign verify ghcr.io/vsco/ome-manager:${{ needs.prepare.outputs.tag }} \
             --certificate-identity-regexp=https://github.com/sgl-project/ome/.github/workflows/release.yaml@refs/tags/.* \
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
           \`\`\`

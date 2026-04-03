@@ -14,7 +14,7 @@ permissions:
 env:
   # Image registry configuration
   REGISTRY: ghcr.io
-  IMAGE_ORG: moirai-internal
+  IMAGE_ORG: vsco
   # Go version
   GO_VERSION: '1.25'
 
@@ -57,7 +57,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -129,7 +129,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update chart for dev
         run: |
