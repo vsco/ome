@@ -53,7 +53,6 @@ ome:
     tolerations: []
     topologySpreadConstraints: []
     affinity: {}
-    # Full path → ome.imageWithHub ignores global.hub (VSCO-built controller)
     image: ome-manager
     tag: *defaultVersion
     resources:
