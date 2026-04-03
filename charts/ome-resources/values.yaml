@@ -1,12 +1,12 @@
 # VSCO fork: Helm charts are published to oci://ghcr.io/vsco/charts (see .github/workflows/vsco-publish-helm-charts.yaml).
 # shared-infra only sets var.ome_version (chart semver). Forked ome-manager uses a full image ref so other images can stay on global.hub.
 global:
-  hub: "ghcr.io/moirai-internal"
+  hub: "ghcr.io/vsco"
   imagePullSecrets:
     - name: ghcr-creds
 
 ome:
-  version: &defaultVersion v0.1.4-vsco1
+  version: &defaultVersion v0.1.4
   metricsaggregator:
     enableMetricAggregation: "false"
     enablePrometheusScraping: "false"
@@ -54,7 +54,7 @@ ome:
     topologySpreadConstraints: []
     affinity: {}
     # Full path → ome.imageWithHub ignores global.hub (VSCO-built controller)
-    image: ghcr.io/vsco/ome-manager
+    image: ome-manager
     tag: *defaultVersion
     resources:
       limits:
