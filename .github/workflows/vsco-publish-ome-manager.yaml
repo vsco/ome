@@ -1,97 +1,97 @@
-# =============================================================================
-# VSCO FORK ONLY — REMOVE BEFORE OPENING A PR TO sgl-project/ome
+## =============================================================================
+## VSCO FORK ONLY — REMOVE BEFORE OPENING A PR TO sgl-project/ome
+##
+## This workflow builds dockerfiles/manager.Dockerfile and pushes ONLY to:
+##   ghcr.io/vsco/ome-manager:<tag>
+## (Not ghcr.io/moirai-internal — that is upstream Makefile / other workflows.)
+##
+## Delete this entire file when upstreaming your fork (or keep it only on a
+## long-lived internal branch). Upstream does not need VSCO registry automation.
+##
+## Usage:
+##   Actions → "VSCO (fork): publish ome-manager to ghcr.io/vsco" → Run workflow
+##   Default tag matches local manual pushes: v0.1.4-vsco2. Override "image_tag"
+##   for a new release, or clear it to use git short SHA instead.
+##
+## Auth: default GITHUB_TOKEN usually works for packages:write in the vsco org.
+##       If pushes fail with 403, add a repo secret VSCO_GHCR_TOKEN (PAT with
+##       write:packages) and uncomment the password line below.
+## =============================================================================
 #
-# This workflow builds dockerfiles/manager.Dockerfile and pushes ONLY to:
-#   ghcr.io/vsco/ome-manager:<tag>
-# (Not ghcr.io/moirai-internal — that is upstream Makefile / other workflows.)
+#name: VSCO (fork) publish ome-manager to ghcr.io/vsco
 #
-# Delete this entire file when upstreaming your fork (or keep it only on a
-# long-lived internal branch). Upstream does not need VSCO registry automation.
+#on:
+#  workflow_dispatch:
+#    inputs:
+#      image_tag:
+#        description: 'Tag for ghcr.io/vsco/ome-manager (empty = git short SHA)'
+#        required: false
+#        default: 'v0.1.4-vsco2'
 #
-# Usage:
-#   Actions → "VSCO (fork): publish ome-manager to ghcr.io/vsco" → Run workflow
-#   Default tag matches local manual pushes: v0.1.4-vsco2. Override "image_tag"
-#   for a new release, or clear it to use git short SHA instead.
+#permissions:
+#  contents: read
+#  packages: write
 #
-# Auth: default GITHUB_TOKEN usually works for packages:write in the vsco org.
-#       If pushes fail with 403, add a repo secret VSCO_GHCR_TOKEN (PAT with
-#       write:packages) and uncomment the password line below.
-# =============================================================================
-
-name: VSCO (fork) publish ome-manager to ghcr.io/vsco
-
-on:
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: 'Tag for ghcr.io/vsco/ome-manager (empty = git short SHA)'
-        required: false
-        default: 'v0.1.4-vsco2'
-
-permissions:
-  contents: read
-  packages: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_ORG: vsco
-  IMAGE_NAME: ome-manager
-  GO_VERSION: '1.25'
-
-jobs:
-  build-push-ome-manager:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to ghcr.io (org vsco packages)
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          # Optional: set repo secret VSCO_GHCR_TOKEN (PAT, write:packages) if GITHUB_TOKEN cannot push
-          password: ${{ secrets.VSCO_GHCR_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Compute image tag
-        id: tag
-        run: |
-          TAG="${{ inputs.image_tag }}"
-          if [ -z "$TAG" ]; then
-            TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Publishing to ghcr.io/vsco → ${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAME}:${TAG}"
-
-      - name: Build and push ome-manager (linux/amd64)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: dockerfiles/manager.Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ steps.tag.outputs.tag }}
-            GIT_TAG=${{ steps.tag.outputs.tag }}
-            GIT_COMMIT=${{ github.sha }}
-
-      - name: Summary
-        run: |
-          echo "## VSCO ome-manager image" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Pushed: \`${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Remove \`.github/workflows/vsco-publish-ome-manager.yaml\` before submitting a PR to sgl-project/ome." >> "$GITHUB_STEP_SUMMARY"
+#env:
+#  REGISTRY: ghcr.io
+#  IMAGE_ORG: vsco
+#  IMAGE_NAME: ome-manager
+#  GO_VERSION: '1.25'
+#
+#jobs:
+#  build-push-ome-manager:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v6
+#
+#      - name: Setup Go
+#        uses: actions/setup-go@v6
+#        with:
+#          go-version: ${{ env.GO_VERSION }}
+#          cache: true
+#
+#      - name: Set up Docker Buildx
+#        uses: docker/setup-buildx-action@v3
+#
+#      - name: Log in to ghcr.io (org vsco packages)
+#        uses: docker/login-action@v4
+#        with:
+#          registry: ${{ env.REGISTRY }}
+#          username: ${{ github.actor }}
+#          # Optional: set repo secret VSCO_GHCR_TOKEN (PAT, write:packages) if GITHUB_TOKEN cannot push
+#          password: ${{ secrets.VSCO_GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+#
+#      - name: Compute image tag
+#        id: tag
+#        run: |
+#          TAG="${{ inputs.image_tag }}"
+#          if [ -z "$TAG" ]; then
+#            TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
+#          fi
+#          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+#          echo "Publishing to ghcr.io/vsco → ${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAME}:${TAG}"
+#
+#      - name: Build and push ome-manager (linux/amd64)
+#        uses: docker/build-push-action@v7
+#        with:
+#          context: .
+#          file: dockerfiles/manager.Dockerfile
+#          platforms: linux/amd64
+#          push: true
+#          tags: |
+#            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#          build-args: |
+#            VERSION=${{ steps.tag.outputs.tag }}
+#            GIT_TAG=${{ steps.tag.outputs.tag }}
+#            GIT_COMMIT=${{ github.sha }}
+#
+#      - name: Summary
+#        run: |
+#          echo "## VSCO ome-manager image" >> "$GITHUB_STEP_SUMMARY"
+#          echo "" >> "$GITHUB_STEP_SUMMARY"
+#          echo "Pushed: \`${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+#          echo "" >> "$GITHUB_STEP_SUMMARY"
+#          echo "Remove \`.github/workflows/vsco-publish-ome-manager.yaml\` before submitting a PR to sgl-project/ome." >> "$GITHUB_STEP_SUMMARY"
