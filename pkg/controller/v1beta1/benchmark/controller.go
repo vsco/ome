@@ -248,6 +248,11 @@ func (r *BenchmarkJobReconciler) addNodeSelectorFromInferenceService(ctx context
 		return err
 	}
 
+	// Model-ready node selector follows the InferenceService: when the skip annotation is absent or
+	// not "true", require models.ome.io/...=Ready so the benchmark runs on nodes where model-agent
+	// has already placed weights. When constants.SkipModelReadyNodeSelectorAnnotationKey is "true",
+	// omit that selector so the job can schedule like engine pods on elastic GPU nodes (e.g.
+	// Karpenter) before the Ready label exists.
 	if isvcutils.IsSkipModelReadyNodeSelector(inferenceService.Annotations) {
 		r.Log.Info("Skipping model-ready nodeSelector for benchmark job (InferenceService annotation)",
 			"annotation", constants.SkipModelReadyNodeSelectorAnnotationKey,
