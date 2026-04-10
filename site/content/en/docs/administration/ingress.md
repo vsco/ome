@@ -129,6 +129,7 @@ The following ingress settings can be overridden per service:
 |--------------------------------------------|----------------------------|---------------------------------|--------------------------|
 | `ome.io/ingress-domain-template`           | `domainTemplate`           | Custom domain pattern           | String template          |
 | `ome.io/ingress-domain`                    | `ingressDomain`            | Fixed base domain               | String                   |
+| `ome.io/ingress-class-name`                | `ingressClassName`         | Ingress controller class        | String                   |
 | `ome.io/ingress-additional-domains`        | `additionalIngressDomains` | Extra domains (comma-separated) | String list              |
 | `ome.io/ingress-url-scheme`                | `urlScheme`                | HTTP/HTTPS scheme               | String                   |
 | `ome.io/ingress-path-template`             | `pathTemplate`             | URL path pattern                | String template          |

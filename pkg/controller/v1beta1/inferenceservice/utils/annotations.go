@@ -119,6 +119,11 @@ func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotation
 		resolved.IngressDomain = ingressDomain
 	}
 
+	if className, exists := annotations[constants.IngressClassName]; exists && className != "" {
+		v := className
+		resolved.IngressClassName = &v
+	}
+
 	if urlScheme, exists := annotations[constants.IngressURLScheme]; exists && urlScheme != "" {
 		resolved.UrlScheme = urlScheme
 	}
