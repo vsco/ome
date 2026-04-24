@@ -9,10 +9,6 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
-func strPtr(s string) *string {
-	return &s
-}
-
 func TestResolveIngressConfig(t *testing.T) {
 	// Base config from ConfigMap
 	baseConfig := &controllerconfig.IngressConfig{
@@ -120,28 +116,10 @@ func TestResolveIngressConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "ingress class name override",
-			annotations: map[string]string{
-				constants.IngressClassName: "private-ingress-controller",
-			},
-			expected: &controllerconfig.IngressConfig{
-				IngressGateway:          "knative-serving/knative-ingress-gateway",
-				IngressServiceName:      "istio-ingressgateway.istio-system.svc.cluster.local",
-				IngressDomain:           "svc.cluster.local",
-				DomainTemplate:          "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
-				UrlScheme:               "http",
-				PathTemplate:            "",
-				DisableIstioVirtualHost: false,
-				DisableIngressCreation:  false,
-				IngressClassName:        strPtr("private-ingress-controller"),
-			},
-		},
-		{
 			name: "comprehensive override",
 			annotations: map[string]string{
 				constants.IngressDomainTemplate:          "{{ .Name }}-prod.company.com",
 				constants.IngressDomain:                  "company.com",
-				constants.IngressClassName:               "nginx",
 				constants.IngressURLScheme:               "https",
 				constants.IngressPathTemplate:            "/ml/{{ .Name }}",
 				constants.IngressAdditionalDomains:       "backup.com,mirror.net",
@@ -158,7 +136,6 @@ func TestResolveIngressConfig(t *testing.T) {
 				DisableIstioVirtualHost:  false,
 				DisableIngressCreation:   false,
 				AdditionalIngressDomains: &[]string{"backup.com", "mirror.net"},
-				IngressClassName:         strPtr("nginx"),
 			},
 		},
 	}

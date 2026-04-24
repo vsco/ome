@@ -135,7 +135,6 @@ var (
 	IngressPathTemplate            = OMEAPIGroupName + "/ingress-path-template"
 	IngressDisableIstioVirtualHost = OMEAPIGroupName + "/ingress-disable-istio-virtualhost"
 	IngressDisableCreation         = OMEAPIGroupName + "/ingress-disable-creation"
-	IngressClassName               = OMEAPIGroupName + "/ingress-class-name"
 )
 
 // InferenceService Annotations for model encryption and decryption
