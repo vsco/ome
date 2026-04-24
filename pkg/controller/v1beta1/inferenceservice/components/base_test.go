@@ -11,6 +11,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 func TestUpdatePodSpecNodeSelector(t *testing.T) {
@@ -252,4 +253,67 @@ func TestProcessBaseLabels(t *testing.T) {
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.InferenceServiceBaseModelSizeLabelKey, "LARGE"))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel)))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelVendorLabelKey, "meta"))
+}
+
+func TestUpdatePodSpecVolumes_PVCAndHostPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				Path: &modelPath,
+			},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		Log:           logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+
+	pod := &v1.PodSpec{}
+	UpdatePodSpecVolumes(b, isvc, pod, &metav1.ObjectMeta{})
+	g.Expect(pod.Volumes).To(gomega.HaveLen(1))
+	g.Expect(pod.Volumes[0].HostPath).NotTo(gomega.BeNil())
+	g.Expect(pod.Volumes[0].HostPath.Path).To(gomega.Equal(modelPath))
+
+	b.InferenceServiceConfig = &controllerconfig.InferenceServicesConfig{
+		ModelStorage: controllerconfig.ModelStorageConfig{
+			PVCClaimName: "ome-models-efs",
+			PVCMountRoot: "/mnt/data/models",
+		},
+	}
+	pod2 := &v1.PodSpec{}
+	UpdatePodSpecVolumes(b, isvc, pod2, &metav1.ObjectMeta{})
+	g.Expect(pod2.Volumes).To(gomega.HaveLen(1))
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim).NotTo(gomega.BeNil())
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim.ClaimName).To(gomega.Equal("ome-models-efs"))
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim.ReadOnly).To(gomega.BeTrue())
+}
+
+func TestUpdateVolumeMounts_PVCSubPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				Path: &modelPath,
+			},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
+	g.Expect(container.VolumeMounts[0].SubPath).To(gomega.Equal("my-model"))
 }

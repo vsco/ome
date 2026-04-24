@@ -87,8 +87,20 @@ ome:
     customPromQuery: ""
     scalingThreshold: "10"
     scalingOperator: "GreaterThanOrEqual"
+  # JSON merged into inferenceservice-config modelStorage (pvcClaimName / pvcMountRoot).
+  # Per-InferenceService override: annotation ome.io/model-storage-pvc.
+  modelStorage: {}
 modelAgent:
   hostPath: /mnt/data/models
+  # EFS (ReadWriteMany) or other RWX PVC for shared model cache; aligns with ome.modelStorage.
+  persistence:
+    enabled: false
+    create: false
+    claimName: ome-models-efs
+    accessModes:
+      - ReadWriteMany
+    storageClassName: efs-sc-gp
+    size: 200Gi
   priorityClassName: system-node-critical
   serviceAccountName: ome-model-agent
   image:

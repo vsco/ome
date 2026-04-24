@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	IngressConfigKeyName   = "ingress"
-	DeployConfigName       = "deploy"
-	MultiNodeProberName    = "multinodeProber"
-	BenchmarkJobConfigName = "benchmarkjob"
+	IngressConfigKeyName    = "ingress"
+	DeployConfigName        = "deploy"
+	MultiNodeProberName     = "multinodeProber"
+	ModelStorageConfigName  = "modelStorage"
+	BenchmarkJobConfigName  = "benchmarkjob"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -45,9 +46,20 @@ type PodConfig struct {
 }
 
 // +kubebuilder:object:generate=false
+type ModelStorageConfig struct {
+	// PVCClaimName, when set, switches engine/decoder base-model volumes from hostPath to this
+	// PersistentVolumeClaim in the InferenceService namespace (ReadWriteMany, e.g. EFS).
+	PVCClaimName string `json:"pvcClaimName,omitempty"`
+	// PVCMountRoot is the path inside the pod that is the root of the PVC (SubPath is computed
+	// relative to this and the model Storage.Path). Defaults to /mnt/data/models.
+	PVCMountRoot string `json:"pvcMountRoot,omitempty"`
+}
+
+// +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
 	// MultiNodeProber contains all MultiNodeProber Configuration
 	MultiNodeProber MultiNodeProberConfig `json:"multinodeProber"`
+	ModelStorage    ModelStorageConfig    `json:"modelStorage,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
@@ -96,6 +108,7 @@ func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServi
 	icfg := &InferenceServicesConfig{}
 	for _, err := range []error{
 		getComponentConfig(MultiNodeProberName, configMap, &icfg.MultiNodeProber),
+		getComponentConfig(ModelStorageConfigName, configMap, &icfg.ModelStorage),
 	} {
 		if err != nil {
 			return nil, err

@@ -69,11 +69,14 @@ func TestNewInferenceServicesConfig(t *testing.T) {
 					"startupTimeoutSeconds": 30,
 					"unavailableThresholdSeconds": 60
 				}`,
+				ModelStorageConfigName: `{"pvcClaimName":"ome-models-efs","pvcMountRoot":"/mnt/data/models"}`,
 			},
 			expectedError: false,
 			validateConfig: func(t *testing.T, cfg *InferenceServicesConfig) {
 				assert.Equal(t, "test-image", cfg.MultiNodeProber.Image)
 				assert.Equal(t, "100m", cfg.MultiNodeProber.CPURequest)
+				assert.Equal(t, "ome-models-efs", cfg.ModelStorage.PVCClaimName)
+				assert.Equal(t, "/mnt/data/models", cfg.ModelStorage.PVCMountRoot)
 			},
 		},
 		{

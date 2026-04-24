@@ -1,0 +1,101 @@
+# =============================================================================
+# VSCO FORK ONLY — REMOVE BEFORE OPENING A PR TO sgl-project/ome
+#
+# Packages ome-crd, ome-resources, ome-serving and pushes OCI charts to:
+#   oci://ghcr.io/vsco/charts
+#
+# Use a Helm semver for chart_version (e.g. 0.1.4), not a leading "v".
+# Point shared-infra at the same semver: var.ome_version = "0.1.4" and
+#   repository = "oci://ghcr.io/vsco/charts"
+# in terraform/modules/eks/backend-services/ome.tf
+#
+# Auth: repo secret VSCO_GHCR_TOKEN (PAT write:packages) if GITHUB_TOKEN cannot push.
+# =============================================================================
+
+name: VSCO (fork) publish OME Helm charts to ghcr.io/vsco
+
+on:
+  workflow_dispatch:
+    inputs:
+      chart_version:
+        description: 'Helm chart semver (e.g. 0.1.4) — no leading v'
+        required: true
+        default: '0.1.4'
+      image_tag:
+        description: 'OME image tag written into values.yaml (e.g. v0.1.4-vsco3)'
+        required: true
+        default: 'v0.1.4-vsco3'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  CHART_ORG: vsco
+
+jobs:
+  publish-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Install yq
+        run: |
+          curl -fsSL -X GET "https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64" -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Log in to ghcr.io (org vsco packages)
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.VSCO_GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Stamp chart and image versions
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.chart_version }}"
+          TAG="${{ inputs.image_tag }}"
+          for chart in charts/*/; do
+            yq eval -i ".version = \"${VERSION}\"" "${chart}Chart.yaml"
+            yq eval -i ".appVersion = \"${TAG}\"" "${chart}Chart.yaml"
+          done
+          chart="charts/ome-resources/"
+          if [[ -f "${chart}values.yaml" ]]; then
+            yq eval -i ".ome.version = \"${TAG}\"" "${chart}values.yaml"
+            yq eval -i ".ome.benchmarkJob.tag = \"${TAG}\"" "${chart}values.yaml"
+            yq eval -i ".ome.multinodeProber.tag = \"${TAG}\"" "${chart}values.yaml"
+            yq eval -i ".ome.omeAgent.tag = \"${TAG}\"" "${chart}values.yaml"
+            yq eval -i ".modelAgent.image.tag = \"${TAG}\"" "${chart}values.yaml"
+          fi
+
+      - name: Package and push charts
+        env:
+          CHART_VERSION: ${{ inputs.chart_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p .charts-out
+          for chart in charts/*/; do
+            helm package "${chart}" -d .charts-out
+          done
+          for tgz in .charts-out/*.tgz; do
+            helm push "${tgz}" "oci://${{ env.REGISTRY }}/${{ env.CHART_ORG }}/charts"
+          done
+          echo "Published charts at oci://${{ env.REGISTRY }}/${{ env.CHART_ORG }}/charts (chart version ${CHART_VERSION})"
+
+      - name: Summary
+        run: |
+          echo "## VSCO OME Helm charts" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "OCI registry: \`oci://${{ env.REGISTRY }}/${{ env.CHART_ORG }}/charts\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Chart semver: \`${{ inputs.chart_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image tag in ome-resources values: \`${{ inputs.image_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Set \`var.ome_version\` to the chart semver and \`repository\` to this OCI URL in shared-infra \`ome.tf\`." >> "$GITHUB_STEP_SUMMARY"

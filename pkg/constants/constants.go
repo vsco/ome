@@ -339,7 +339,16 @@ const (
 // SkipModelReadyNodeSelectorAnnotationKey, when set to "true" on an InferenceService, omits the
 // models.ome.io/...=Ready nodeSelector from engine and decoder pods. Use this with elastic GPU
 // pools (e.g. Karpenter) where nodes are provisioned before the model-agent applies the Ready label.
-const SkipModelReadyNodeSelectorAnnotationKey = "ome.io/skip-model-ready-node-selector"
+//
+// ModelStoragePVCAnnotationKey names the PersistentVolumeClaim (in the InferenceService namespace)
+// for base model files instead of hostPath; overrides ConfigMap modelStorage.pvcClaimName.
+// DefaultModelPVCMountRoot must align with model-agent --models-root-dir and storage paths.
+const (
+	SkipModelReadyNodeSelectorAnnotationKey = "ome.io/skip-model-ready-node-selector"
+	// ModelStoragePVCAnnotationKey must stay in sync with OMEAPIGroupName + "/model-storage-pvc" (OMEAPIGroupName is a var).
+	ModelStoragePVCAnnotationKey = "ome.io/model-storage-pvc"
+	DefaultModelPVCMountRoot     = "/mnt/data/models"
+)
 
 // InferenceService default/canary constants
 const (
@@ -426,6 +435,7 @@ var (
 		ModelInitInjectionKey,        // ome.io/inject-model-init - triggers model init container injection via webhook
 		FineTunedAdapterInjectionKey, // ome.io/inject-fine-tuned-adapter - triggers fine-tuned adapter injection via webhook
 		ServingSidecarInjectionKey,   // ome.io/inject-serving-sidecar - triggers serving sidecar injection via webhook
+		ModelStoragePVCAnnotationKey, // ome.io/model-storage-pvc - per-ISVC PVC claim for base model files
 	}
 )
 

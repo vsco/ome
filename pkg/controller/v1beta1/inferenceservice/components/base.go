@@ -96,6 +96,12 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 				MountPath: *b.BaseModel.Storage.Path,
 				ReadOnly:  true,
 			}
+			if isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig) != "" {
+				mountRoot := isvcutils.ModelStoragePVCMountRoot(b.InferenceServiceConfig)
+				if sub := isvcutils.ModelVolumeMountSubPathForPVC(mountRoot, *b.BaseModel.Storage.Path); sub != "" {
+					vm.SubPath = sub
+				}
+			}
 			isvcutils.AppendVolumeMount(container, &vm)
 		}
 	}
@@ -236,15 +242,23 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
 	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := corev1.Volume{
-			Name: b.BaseModelMeta.Name,
-			VolumeSource: corev1.VolumeSource{
+		pvcClaim := isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig)
+		modelVolume := corev1.Volume{Name: b.BaseModelMeta.Name}
+		if pvcClaim != "" {
+			modelVolume.VolumeSource = corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcClaim,
+					ReadOnly:  true,
+				},
+			}
+		} else {
+			modelVolume.VolumeSource = corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: *b.BaseModel.Storage.Path,
 				},
-			},
+			}
 		}
-		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+		podSpec.Volumes = utils.AppendVolumeIfNotExists(podSpec.Volumes, modelVolume)
 	}
 
 	// Add empty model directory volume if required for fine-tuned serving
