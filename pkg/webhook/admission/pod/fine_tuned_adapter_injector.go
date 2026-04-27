@@ -3,6 +3,7 @@ package pod
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
@@ -47,7 +48,14 @@ func newFineTunedAdapterInjector(configMap *v1.ConfigMap, client client.Client) 
 // InjectFineTunedAdapter injects the fine-tuned weight initialization container into the pod if necessary.
 func (fa *FineTunedAdapterInjector) InjectFineTunedAdapter(pod *v1.Pod) error {
 	if fineTunedWeightName, ok := pod.ObjectMeta.Annotations[constants.FineTunedAdapterInjectionKey]; ok && len(fineTunedWeightName) > 0 {
-		// set the fine-tuned weight name
+		// OCI adapter init is not used for PVC-backed weights (already on disk). Skip before validate()
+		// so clusters without fineTunedAdapter ConfigMap (Image/CompartmentId/…) do not deny pod admission.
+		ftw, err := isvcutils.GetFineTunedWeight(fa.client, fineTunedWeightName)
+		if err == nil && ftw.Spec.Storage != nil && ftw.Spec.Storage.StorageUri != nil {
+			if strings.HasPrefix(strings.TrimSpace(*ftw.Spec.Storage.StorageUri), storage.PVCStoragePrefix) {
+				return nil
+			}
+		}
 		fa.fineTunedWeightName = fineTunedWeightName
 		return fa.injectFineTunedAdapter(pod)
 	}

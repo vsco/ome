@@ -743,6 +743,7 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 		fineTunedServing    bool
 		fineTunedWeights    []*v1beta1.FineTunedWeight
 		expectedAnnotations map[string]string
+		annotationAbsences  []string
 		expectedLabels      map[string]string
 		expectedName        string
 	}{
@@ -862,6 +863,62 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			},
 			expectedName: "ft-isvc-engine",
 		},
+		{
+			name: "Fine-tuned serving metadata with PVC-backed adapter",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ft-pvc-isvc",
+					Namespace: "default",
+				},
+			},
+			engineSpec: &v1beta1.EngineSpec{},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+				ModelExtensionSpec: v1beta1.ModelExtensionSpec{
+					Vendor: stringPtr("meta"),
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name: "llama-base",
+			},
+			fineTunedServing: true,
+			fineTunedWeights: []*v1beta1.FineTunedWeight{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ft-weight-pvc",
+					},
+					Spec: v1beta1.FineTunedWeightSpec{
+						HyperParameters: runtime.RawExtension{
+							Raw: []byte(`{"strategy": "lora"}`),
+						},
+						Storage: &v1beta1.StorageSpec{
+							StorageUri: stringPtr("pvc://ome-models-efs/adapters/qwen3-vl-8b-lora"),
+						},
+					},
+				},
+			},
+			expectedAnnotations: map[string]string{
+				constants.FineTunedWeightFTStrategyKey: "lora",
+				constants.BaseModelName:                "llama-base",
+				constants.BaseModelFormat:              "safetensors",
+				constants.BaseModelVendorAnnotationKey: "meta",
+			},
+			annotationAbsences: []string{constants.FineTunedAdapterInjectionKey},
+			expectedLabels: map[string]string{
+				constants.InferenceServicePodLabelKey:           "ft-pvc-isvc",
+				constants.OMEComponentLabel:                     "engine",
+				constants.FTServingLabelKey:                     "true",
+				constants.FineTunedWeightFTStrategyLabelKey:     "lora",
+				constants.FTServingWithMergedWeightsLabelKey:    "false",
+				constants.InferenceServiceBaseModelNameLabelKey: "llama-base",
+				constants.InferenceServiceBaseModelSizeLabelKey: "SMALL",
+				constants.BaseModelTypeLabelKey:                 "Serving",
+				constants.BaseModelVendorLabelKey:               "meta",
+			},
+			expectedName: "ft-pvc-isvc-engine",
+		},
 	}
 
 	for _, tt := range tests {
@@ -907,6 +964,9 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			// Validate annotations
 			for k, v := range tt.expectedAnnotations {
 				g.Expect(objectMeta.Annotations).To(gomega.HaveKeyWithValue(k, v))
+			}
+			for _, k := range tt.annotationAbsences {
+				g.Expect(objectMeta.Annotations).NotTo(gomega.HaveKey(k))
 			}
 
 			// Validate labels

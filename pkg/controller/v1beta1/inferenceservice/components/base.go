@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -392,16 +394,26 @@ func UpdateDecoderAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceService, annotations map[string]string) (map[string]string, error) {
 	// Add fine-tuned weight annotations if applicable
 	if b.FineTunedServing && len(b.FineTunedWeights) > 0 {
-		// Inject ft adapter for single/non-stacked fine-tuned weight downloading
-		annotations[constants.FineTunedAdapterInjectionKey] = b.FineTunedWeights[0].Name
-
-		// Add fine-tuned weight ft strategy
-		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(b.FineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
+		ftw := b.FineTunedWeights[0]
+		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(ftw.Spec.HyperParameters, constants.StrategyConfigKey)
 		if err != nil || fineTunedWeightFTStrategy == nil {
-			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", b.FineTunedWeights[0].Name, "namespace", isvc.Namespace)
+			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", ftw.Name, "namespace", isvc.Namespace)
 			return nil, err
 		}
 		annotations[constants.FineTunedWeightFTStrategyKey] = fineTunedWeightFTStrategy.(string)
+
+		uri := ""
+		if ftw.Spec.Storage != nil && ftw.Spec.Storage.StorageUri != nil {
+			uri = strings.TrimSpace(*ftw.Spec.Storage.StorageUri)
+		}
+		// OCI/S3 fine-tuned adapter init expects object storage URIs. PVC-backed weights (e.g. Git LFS
+		// materialized onto a shared volume) are already on disk; skip injection.
+		if strings.HasPrefix(uri, storage.PVCStoragePrefix) {
+			b.Log.Info("Skipping fine-tuned adapter injection for PVC-backed FineTunedWeight",
+				"FineTunedWeight", ftw.Name, "namespace", isvc.Namespace)
+		} else {
+			annotations[constants.FineTunedAdapterInjectionKey] = ftw.Name
+		}
 	}
 
 	if b.FineTunedServingWithMergedWeights {
