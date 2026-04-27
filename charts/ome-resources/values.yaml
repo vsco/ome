@@ -6,7 +6,7 @@ global:
     - name: ghcr-creds
 
 ome:
-  version: &defaultVersion v0.1.4-vsco4
+  version: &defaultVersion v0.1.4-vsco5
   metricsaggregator:
     enableMetricAggregation: "false"
     enablePrometheusScraping: "false"
