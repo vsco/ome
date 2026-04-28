@@ -571,13 +571,15 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.Infere
 			// to status with this stale state.
 			return nil
 		}
-		// Reconcile queue copy of isvc carries a stale ResourceVersion; status update must use
-		// the version from the server (same as existingService) or writes fail with 409 when
-		// Helm/Flux or other controllers bump metadata between reconcile and Update.
-		desiredService.ResourceVersion = existingService.ResourceVersion
-		if err := r.Status().Update(context.TODO(), desiredService); err != nil {
+		// Apply only status onto the object we just read from the API. desiredService may carry
+		// stale spec/metadata from the reconcile queue while Helm/Flux updated the live object;
+		// Status().Update with mismatched spec+RV can still fail with 409 or other conflicts.
+		existingService.Status = *desiredService.Status.DeepCopy()
+		if err := r.Status().Update(context.TODO(), existingService); err != nil {
 			return err
 		}
+		desiredService.Status = existingService.Status
+		desiredService.ResourceVersion = existingService.ResourceVersion
 		isReady := inferenceServiceReadiness(desiredService.Status)
 		if wasReady && !isReady { // Moved to NotReady State
 			r.Recorder.Eventf(desiredService, v1.EventTypeWarning, string(InferenceServiceNotReadyState),
