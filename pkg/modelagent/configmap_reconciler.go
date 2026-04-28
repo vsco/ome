@@ -1023,7 +1023,7 @@ func (c *ConfigMapReconciler) FindMatchedModelFromConfigMap(configMap *corev1.Co
 				searchingError = fmt.Errorf("parentPath value for %q is not a string", k)
 				continue
 			}
-			if strings.ToLower(k) == strings.ToLower(currentModelTypeAndNodeName) {
+			if strings.EqualFold(k, currentModelTypeAndNodeName) {
 				continue
 			}
 
@@ -1324,7 +1324,7 @@ func (c *ConfigMapReconciler) getDataEntryBasedOnModelKey(ctx context.Context, m
 
 func parseParent(parentMap map[string]string) (string, string) {
 	var parentName, parentDir string
-	if parentMap != nil && len(parentMap) != 0 {
+	if len(parentMap) != 0 {
 		for key, value := range parentMap {
 			parentName = key
 			parentDir = value

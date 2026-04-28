@@ -27,7 +27,6 @@ type mockHuggingFaceModel struct {
 	modelSizeBytes     int64
 	hasVision          bool
 	isEmbedding        bool
-	diffusionModel     *modelconfig.DiffusionPipelineSpec
 }
 
 type mockDiffusionModel struct {
@@ -362,6 +361,55 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				string(v1beta1.ModelCapabilityAudioToText),
 				string(v1beta1.ModelCapabilityAudioToAudio),
 			},
+		},
+		{
+			name: "NemotronH_Nano Omni Model - falls through to vision due to case mismatch",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "NemotronH_Nano_Omni_Reasoning_V3",
+				architecture: "NemotronH_Nano_Omni_Reasoning_V3",
+				hasVision:    true,
+			},
+			expectedCapabilities: []string{
+				string(v1beta1.ModelCapabilityImageTextToText),
+				string(v1beta1.ModelCapabilityTextToText),
+				string(v1beta1.ModelCapabilityAudioToText),
+			},
+		},
+		{
+			name: "Whisper ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "whisper",
+				architecture: "WhisperForConditionalGeneration",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "Wav2Vec2 ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "wav2vec2",
+				architecture: "Wav2Vec2ForCTC",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "HuBERT ASR Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "hubert",
+				architecture: "HubertForCTC",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
+		},
+		{
+			name: "Generic ForSpeechToText Model",
+			mockModel: &mockHuggingFaceModel{
+				modelType:    "seamless_m4t",
+				architecture: "SeamlessM4TForSpeechToText",
+				hasVision:    false,
+			},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityAudioToText)},
 		},
 	}
 

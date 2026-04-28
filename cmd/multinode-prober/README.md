@@ -9,7 +9,7 @@ and startup endpoints that Kubernetes can use to determine the health and status
 
 - Liveness Probe (/healthz): Check whether the vLLM and its services are running and responsive.
 - Readiness Probe (/readyz): Ensures that the vLLM is ready to accept traffic, typically after the model is fully initialized.
-- Startup Probe (/startupz): Verifies that the vLLM has started correctly, useful for containers with long startup times. 
+- Startup Probe (/startupz): Verifies that the vLLM has started correctly, useful for containers with long startup times.
 - Configurable endpoints for monitoring the health of the vLLM services.
 
 ### Requirements
@@ -25,7 +25,7 @@ The server accepts the following command-line arguments:
 - --vllm-endpoint: The HTTP endpoint used to check the health of the vLLM service. Default is http://localhost:8081/health.
 - --read-timeout: The timeout for reading the request from the client. Default is 10 seconds.
 - --write-timeout: The timeout for writing the response to the client. Default is 10 seconds.
-- --idle-timeout: The maximum amount of time to wait for the next request when keep-alives are enabled. Default is 120 seconds.
+- --idle-timeout: The maximum amount of time to wait for the next request when keep-alive are enabled. Default is 120 seconds.
 - --inference-timeout: The timeout for the inference request to the vLLM service. Default is 100 seconds.
 
 ### Usage

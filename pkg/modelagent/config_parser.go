@@ -544,6 +544,12 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 		}
 	}
 
+	// For NemotronH_Nano capability
+	if strings.Contains(normalizedModelType, "nemotronh_nano") {
+		return append(capabilities, string(v1beta1.ModelCapabilityImageTextToText), string(v1beta1.ModelCapabilityTextToText),
+			string(v1beta1.ModelCapabilityAudioToText))
+	}
+
 	// For vision, only support image text capability right now
 	if hfModel.HasVision() {
 		return append(capabilities, string(v1beta1.ModelCapabilityImageTextToText))
@@ -555,6 +561,15 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 			string(v1beta1.ModelCapabilityTextToAudio), string(v1beta1.ModelCapabilityImageTextToAudio),
 			string(v1beta1.ModelCapabilityVideoTextToAudio), string(v1beta1.ModelCapabilityAudioToText),
 			string(v1beta1.ModelCapabilityAudioToAudio))
+	}
+
+	// Check for audio-to-text capability (ASR/transcription models e.g. Whisper, Wav2Vec2, HuBERT)
+	if strings.Contains(normalizedArchitecture, "whisper") ||
+		strings.Contains(normalizedArchitecture, "wav2vec2") ||
+		strings.Contains(normalizedArchitecture, "hubert") ||
+		strings.Contains(normalizedArchitecture, "fortc") ||
+		strings.Contains(normalizedArchitecture, "forspeechtotext") {
+		return append(capabilities, string(v1beta1.ModelCapabilityAudioToText))
 	}
 
 	// Check for text embedding capability
