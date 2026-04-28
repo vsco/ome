@@ -4,8 +4,8 @@
 # Packages ome-crd, ome-resources, ome-serving and pushes OCI charts to:
 #   oci://ghcr.io/vsco/charts
 #
-# Use a Helm semver for chart_version (e.g. 0.1.5), not a leading "v".
-# Point shared-infra at the same semver: var.ome_version = "0.1.5" and
+# Use a Helm semver for chart_version (e.g. 0.1.5-vsco3), not a leading "v" on chart_version.
+# Point shared-infra at the same semver: var.ome_version = "0.1.5-vsco3" and
 #   repository = "oci://ghcr.io/vsco/charts"
 # in terraform/modules/eks/backend-services/ome.tf
 #
@@ -18,13 +18,13 @@ on:
   workflow_dispatch:
     inputs:
       chart_version:
-        description: 'Helm chart semver (e.g. 0.1.5) — no leading v'
+        description: 'Helm chart semver (e.g. 0.1.5-vsco3) — no leading v'
         required: true
-        default: '0.1.5'
+        default: '0.1.5-vsco3'
       image_tag:
-        description: 'OME image tag written into values.yaml (e.g. v0.1.5-vsco2)'
+        description: 'OME image tag written into values.yaml (e.g. v0.1.5-vsco3)'
         required: true
-        default: 'v0.1.5-vsco2'
+        default: 'v0.1.5-vsco3'
 
 permissions:
   contents: read
