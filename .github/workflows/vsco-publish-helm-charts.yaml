@@ -22,9 +22,9 @@ on:
         required: true
         default: '0.1.5'
       image_tag:
-        description: 'OME image tag written into values.yaml (e.g. v0.1.5-vsco1)'
+        description: 'OME image tag written into values.yaml (e.g. v0.1.5-vsco2)'
         required: true
-        default: 'v0.1.5-vsco1'
+        default: 'v0.1.5-vsco2'
 
 permissions:
   contents: read
