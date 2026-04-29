@@ -317,3 +317,69 @@ func TestUpdateVolumeMounts_PVCSubPath(t *testing.T) {
 	g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
 	g.Expect(container.VolumeMounts[0].SubPath).To(gomega.Equal("my-model"))
 }
+
+// Fine-tuned serving with PVC-backed weights skips inject annotations; emptyDir for /opt/ml/model
+// must not be mounted unless adapter/model-init injection requires it (matches UpdatePodSpecVolumes).
+func TestUpdateVolumeMounts_FTWithoutEmptyDirSkipsModelEmptyDirMount(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/qwen3-vl-8b-instruct"
+	b := &BaseComponentFields{
+		FineTunedServing: true,
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "qwen3-vl-8b-instruct"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	ann := map[string]string{
+		constants.BaseModelName: "qwen3-vl-8b-instruct",
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: ann})
+	g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
+	g.Expect(container.VolumeMounts[0].Name).To(gomega.Equal("qwen3-vl-8b-instruct"))
+	for _, vm := range container.VolumeMounts {
+		g.Expect(vm.Name).NotTo(gomega.Equal(constants.ModelEmptyDirVolumeName))
+	}
+}
+
+func TestUpdateVolumeMounts_FTWithInjectAddsModelEmptyDirMount(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		FineTunedServing: true,
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	ann := map[string]string{
+		constants.FineTunedAdapterInjectionKey: "some-adapter",
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: ann})
+	names := make([]string, 0, len(container.VolumeMounts))
+	for _, vm := range container.VolumeMounts {
+		names = append(names, vm.Name)
+	}
+	g.Expect(names).To(gomega.ContainElement(constants.ModelEmptyDirVolumeName))
+}

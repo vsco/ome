@@ -108,8 +108,10 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		}
 	}
 
-	// Add fine-tuned serving volume mounts
-	if b.FineTunedServing {
+	// Add fine-tuned serving volume mounts for /opt/ml/model only when the emptyDir volume is
+	// required (OCI/S3 adapter init or model-init). PVC-backed FineTunedWeights skip inject
+	// annotations; UpdatePodSpecVolumes then omits model-empty-dir, so mounts must match.
+	if b.FineTunedServing && isvcutils.IsEmptyModelDirVolumeRequired(objectMeta.Annotations) {
 		defaultModelVolumeMount := corev1.VolumeMount{
 			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: constants.ModelDefaultMountPath,
