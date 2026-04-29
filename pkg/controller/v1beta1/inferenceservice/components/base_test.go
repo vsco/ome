@@ -383,3 +383,59 @@ func TestUpdateVolumeMounts_FTWithInjectAddsModelEmptyDirMount(t *testing.T) {
 	}
 	g.Expect(names).To(gomega.ContainElement(constants.ModelEmptyDirVolumeName))
 }
+
+func TestUpdateInitContainerBaseModelVolumeMounts_PVCSubPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"}}
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "my-model"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	pod := &v1.PodSpec{
+		InitContainers: []v1.Container{
+			{
+				Name: "wait-for-base-model",
+				VolumeMounts: []v1.VolumeMount{
+					{Name: "my-model", MountPath: modelPath},
+				},
+			},
+		},
+	}
+	UpdateInitContainerBaseModelVolumeMounts(b, isvc, pod, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(pod.InitContainers[0].VolumeMounts[0].SubPath).To(gomega.Equal("my-model"))
+}
+
+func TestUpdateInitContainerBaseModelVolumeMounts_NoPVCNoOp(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"}}
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "my-model"},
+		Log:           logr.Discard(),
+	}
+	pod := &v1.PodSpec{
+		InitContainers: []v1.Container{
+			{
+				Name: "wait",
+				VolumeMounts: []v1.VolumeMount{
+					{Name: "my-model", MountPath: modelPath},
+				},
+			},
+		},
+	}
+	UpdateInitContainerBaseModelVolumeMounts(b, isvc, pod, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(pod.InitContainers[0].VolumeMounts[0].SubPath).To(gomega.BeEmpty())
+}

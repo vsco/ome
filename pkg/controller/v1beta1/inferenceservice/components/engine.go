@@ -304,6 +304,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	if err != nil {
 		return nil, err
 	}
+	UpdateInitContainerBaseModelVolumeMounts(&e.BaseComponentFields, isvc, podSpec, objectMeta)
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, podSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, podSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, podSpec)
@@ -339,6 +340,7 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 	if err != nil {
 		return nil, err
 	}
+	UpdateInitContainerBaseModelVolumeMounts(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, workerPodSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, workerPodSpec)

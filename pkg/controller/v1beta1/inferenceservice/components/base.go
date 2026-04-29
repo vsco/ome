@@ -138,6 +138,46 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 }
 
+// UpdateInitContainerBaseModelVolumeMounts sets the PVC SubPath on init container volume mounts
+// that target the base model volume and mount path. ServingRuntime templates usually specify
+// only name + mountPath; UpdateVolumeMounts adds SubPath for the main container. Without the
+// same SubPath here, the full claim is mounted at storagePath and paths like
+// ${storagePath}/config.json (used by wait-for-base-model) miss the per-model subdirectory that
+// prefetch and model-agent use on the shared PVC.
+func UpdateInitContainerBaseModelVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
+	if podSpec == nil || len(podSpec.InitContainers) == 0 {
+		return
+	}
+	if b.BaseModel == nil || b.BaseModel.Storage == nil || b.BaseModel.Storage.Path == nil || b.BaseModelMeta == nil {
+		return
+	}
+	if !isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+		return
+	}
+	if strings.TrimSpace(isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig)) == "" {
+		return
+	}
+	mountRoot := isvcutils.ModelStoragePVCMountRoot(b.InferenceServiceConfig)
+	storagePath := filepath.Clean(*b.BaseModel.Storage.Path)
+	sub := isvcutils.ModelVolumeMountSubPathForPVC(mountRoot, storagePath)
+	if sub == "" {
+		return
+	}
+	volName := b.BaseModelMeta.Name
+	for i := range podSpec.InitContainers {
+		for j := range podSpec.InitContainers[i].VolumeMounts {
+			vm := &podSpec.InitContainers[i].VolumeMounts[j]
+			if vm.Name != volName {
+				continue
+			}
+			if filepath.Clean(vm.MountPath) != storagePath {
+				continue
+			}
+			vm.SubPath = sub
+		}
+	}
+}
+
 // UpdateEnvVariables updates environment variables for the container
 func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container, objectMeta *metav1.ObjectMeta) {
 	if container == nil {

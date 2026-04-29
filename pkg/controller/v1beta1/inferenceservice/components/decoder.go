@@ -301,6 +301,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 		return nil, err
 	}
 
+	UpdateInitContainerBaseModelVolumeMounts(&d.BaseComponentFields, isvc, podSpec, objectMeta)
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, podSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, podSpec, v1beta1.DecoderComponent)
 	UpdateDecoderAffinity(&d.BaseComponentFields, isvc, podSpec)
@@ -336,6 +337,7 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 	if err != nil {
 		return nil, err
 	}
+	UpdateInitContainerBaseModelVolumeMounts(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, workerPodSpec, v1beta1.DecoderComponent)
 	UpdateDecoderAffinity(&d.BaseComponentFields, isvc, workerPodSpec)
