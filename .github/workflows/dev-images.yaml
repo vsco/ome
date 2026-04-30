@@ -20,7 +20,7 @@ env:
 
 jobs:
   build-and-push-images:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         component:
@@ -111,7 +111,7 @@ jobs:
 
   publish-dev-charts:
     needs: build-and-push-images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -178,7 +178,7 @@ jobs:
 
   notify:
     needs: [build-and-push-images, publish-dev-charts]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: always()
     steps:
       - name: Summary

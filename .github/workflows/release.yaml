@@ -25,7 +25,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -45,7 +45,7 @@ jobs:
 
   build-images:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         component:
@@ -124,7 +124,7 @@ jobs:
 
   publish-helm-charts:
     needs: [prepare, build-images]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -192,7 +192,7 @@ jobs:
 
   generate-sboms:
     needs: [prepare, build-images]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -221,7 +221,7 @@ jobs:
 
   create-release:
     needs: [prepare, build-images, publish-helm-charts, generate-sboms]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
