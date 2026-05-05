@@ -3,6 +3,7 @@ package pod
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
@@ -17,6 +18,14 @@ import (
 const (
 	fineTunedAdapterConfigMapKeyName = "fineTunedAdapter"
 )
+
+// skipFineTunedAdapterInit returns true when the OCI fine-tuned-adapter init container must not run.
+// That init image only understands oci:// object storage; PVC paths, s3:// (e.g. Mountpoint CSI on the pod),
+// hf://, etc. are delivered without it.
+func skipFineTunedAdapterInit(storageURI string) bool {
+	u := strings.TrimSpace(storageURI)
+	return u == "" || !strings.HasPrefix(u, storage.OCIStoragePrefix)
+}
 
 // FineTunedAdapterInjector represents configuration parameters for the Fine-Tuned Adapter.
 type FineTunedAdapterInjector struct {
@@ -47,7 +56,15 @@ func newFineTunedAdapterInjector(configMap *v1.ConfigMap, client client.Client) 
 // InjectFineTunedAdapter injects the fine-tuned weight initialization container into the pod if necessary.
 func (fa *FineTunedAdapterInjector) InjectFineTunedAdapter(pod *v1.Pod) error {
 	if fineTunedWeightName, ok := pod.ObjectMeta.Annotations[constants.FineTunedAdapterInjectionKey]; ok && len(fineTunedWeightName) > 0 {
-		// set the fine-tuned weight name
+		// OCI adapter init only downloads oci:// objects. Skip before validate() for PVC (on-disk),
+		// s3:// (e.g. LoRA via Mountpoint CSI), hf://, etc., so clusters without fineTunedAdapter
+		// ConfigMap (Image/CompartmentId/…) do not deny pod admission.
+		ftw, err := isvcutils.GetFineTunedWeight(fa.client, fineTunedWeightName)
+		if err == nil && ftw.Spec.Storage != nil && ftw.Spec.Storage.StorageUri != nil {
+			if skipFineTunedAdapterInit(*ftw.Spec.Storage.StorageUri) {
+				return nil
+			}
+		}
 		fa.fineTunedWeightName = fineTunedWeightName
 		return fa.injectFineTunedAdapter(pod)
 	}

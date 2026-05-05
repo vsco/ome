@@ -30,7 +30,7 @@ These annotations are used to configure InferenceService behavior:
 | Annotation                                      | Description                                          |
 |-------------------------------------------------|------------------------------------------------------|
 | `ome.io/inject-model-init`                      | Enables injection of model initialization containers |
-| `ome.io/inject-fine-tuned-adapter`              | Enables injection of fine-tuned adapter containers   |
+| `ome.io/inject-fine-tuned-adapter`              | When set on engine pods, may trigger the OCI fine-tuned-adapter init container only if the referenced `FineTunedWeight` uses `oci://` storage; `pvc://`, `s3://`, `hf://`, and other non-OCI schemes are skipped (weights are already supplied elsewhere, e.g. CSI mounts). |
 | `ome.io/inject-serving-sidecar`                 | Enables injection of serving sidecar containers      |
 | `ome.io/fine-tuned-weight-ft-strategy`          | Specifies the fine-tuning strategy for weights       |
 | `ome.io/base-model-name`                        | Specifies the base model name                        |

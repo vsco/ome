@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -96,12 +98,20 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 				MountPath: *b.BaseModel.Storage.Path,
 				ReadOnly:  true,
 			}
+			if isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig) != "" {
+				mountRoot := isvcutils.ModelStoragePVCMountRoot(b.InferenceServiceConfig)
+				if sub := isvcutils.ModelVolumeMountSubPathForPVC(mountRoot, *b.BaseModel.Storage.Path); sub != "" {
+					vm.SubPath = sub
+				}
+			}
 			isvcutils.AppendVolumeMount(container, &vm)
 		}
 	}
 
-	// Add fine-tuned serving volume mounts
-	if b.FineTunedServing {
+	// Add fine-tuned serving volume mounts for /opt/ml/model only when the emptyDir volume is
+	// required (OCI/S3 adapter init or model-init). PVC-backed FineTunedWeights skip inject
+	// annotations; UpdatePodSpecVolumes then omits model-empty-dir, so mounts must match.
+	if b.FineTunedServing && isvcutils.IsEmptyModelDirVolumeRequired(objectMeta.Annotations) {
 		defaultModelVolumeMount := corev1.VolumeMount{
 			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: constants.ModelDefaultMountPath,
@@ -124,6 +134,46 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 				SubPath:   constants.FineTunedWeightVolumeMountSubPath,
 			}
 			isvcutils.AppendVolumeMount(container, &tfewFineTunedWeightVolumeMount)
+		}
+	}
+}
+
+// UpdateInitContainerBaseModelVolumeMounts sets the PVC SubPath on init container volume mounts
+// that target the base model volume and mount path. ServingRuntime templates usually specify
+// only name + mountPath; UpdateVolumeMounts adds SubPath for the main container. Without the
+// same SubPath here, the full claim is mounted at storagePath and paths like
+// ${storagePath}/config.json (used by wait-for-base-model) miss the per-model subdirectory that
+// prefetch and model-agent use on the shared PVC.
+func UpdateInitContainerBaseModelVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
+	if podSpec == nil || len(podSpec.InitContainers) == 0 {
+		return
+	}
+	if b.BaseModel == nil || b.BaseModel.Storage == nil || b.BaseModel.Storage.Path == nil || b.BaseModelMeta == nil {
+		return
+	}
+	if !isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+		return
+	}
+	if strings.TrimSpace(isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig)) == "" {
+		return
+	}
+	mountRoot := isvcutils.ModelStoragePVCMountRoot(b.InferenceServiceConfig)
+	storagePath := filepath.Clean(*b.BaseModel.Storage.Path)
+	sub := isvcutils.ModelVolumeMountSubPathForPVC(mountRoot, storagePath)
+	if sub == "" {
+		return
+	}
+	volName := b.BaseModelMeta.Name
+	for i := range podSpec.InitContainers {
+		for j := range podSpec.InitContainers[i].VolumeMounts {
+			vm := &podSpec.InitContainers[i].VolumeMounts[j]
+			if vm.Name != volName {
+				continue
+			}
+			if filepath.Clean(vm.MountPath) != storagePath {
+				continue
+			}
+			vm.SubPath = sub
 		}
 	}
 }
@@ -204,8 +254,15 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		return
 	}
 
-	// Add preferred node affinity for model readiness using the shared utility function
-	isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	// Optional: omit models.ome.io/...=Ready so autoscalers can provision GPU nodes before the
+	// model-agent labels them (see SkipModelReadyNodeSelectorAnnotationKey).
+	if isvcutils.IsSkipModelReadyNodeSelector(isvc.Annotations) {
+		b.Log.Info("Skipping model-ready nodeSelector per InferenceService annotation",
+			"annotation", constants.SkipModelReadyNodeSelectorAnnotationKey,
+			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
+	} else {
+		isvcutils.AddNodeSelectorForModelReadyNode(podSpec, b.BaseModelMeta)
+	}
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
@@ -219,7 +276,7 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		}
 	}
 
-	b.Log.Info("Added preferred node affinity for model scheduling",
+	b.Log.Info("Updated pod nodeSelector for model scheduling",
 		"modelName", b.BaseModelMeta.Name,
 		"namespace", b.BaseModelMeta.Namespace,
 		"inferenceService", isvc.Name)
@@ -229,15 +286,23 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
 	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := corev1.Volume{
-			Name: b.BaseModelMeta.Name,
-			VolumeSource: corev1.VolumeSource{
+		pvcClaim := isvcutils.ModelStoragePVCClaimName(isvc, b.InferenceServiceConfig)
+		modelVolume := corev1.Volume{Name: b.BaseModelMeta.Name}
+		if pvcClaim != "" {
+			modelVolume.VolumeSource = corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcClaim,
+					ReadOnly:  true,
+				},
+			}
+		} else {
+			modelVolume.VolumeSource = corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: *b.BaseModel.Storage.Path,
 				},
-			},
+			}
 		}
-		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+		podSpec.Volumes = utils.AppendVolumeIfNotExists(podSpec.Volumes, modelVolume)
 	}
 
 	// Add empty model directory volume if required for fine-tuned serving
@@ -371,16 +436,26 @@ func UpdateDecoderAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceService, annotations map[string]string) (map[string]string, error) {
 	// Add fine-tuned weight annotations if applicable
 	if b.FineTunedServing && len(b.FineTunedWeights) > 0 {
-		// Inject ft adapter for single/non-stacked fine-tuned weight downloading
-		annotations[constants.FineTunedAdapterInjectionKey] = b.FineTunedWeights[0].Name
-
-		// Add fine-tuned weight ft strategy
-		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(b.FineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
+		ftw := b.FineTunedWeights[0]
+		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(ftw.Spec.HyperParameters, constants.StrategyConfigKey)
 		if err != nil || fineTunedWeightFTStrategy == nil {
-			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", b.FineTunedWeights[0].Name, "namespace", isvc.Namespace)
+			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", ftw.Name, "namespace", isvc.Namespace)
 			return nil, err
 		}
 		annotations[constants.FineTunedWeightFTStrategyKey] = fineTunedWeightFTStrategy.(string)
+
+		uri := ""
+		if ftw.Spec.Storage != nil && ftw.Spec.Storage.StorageUri != nil {
+			uri = strings.TrimSpace(*ftw.Spec.Storage.StorageUri)
+		}
+		// OCI/S3 fine-tuned adapter init expects object storage URIs. PVC-backed weights (e.g. Git LFS
+		// materialized onto a shared volume) are already on disk; skip injection.
+		if strings.HasPrefix(uri, storage.PVCStoragePrefix) {
+			b.Log.Info("Skipping fine-tuned adapter injection for PVC-backed FineTunedWeight",
+				"FineTunedWeight", ftw.Name, "namespace", isvc.Namespace)
+		} else {
+			annotations[constants.FineTunedAdapterInjectionKey] = ftw.Name
+		}
 	}
 
 	if b.FineTunedServingWithMergedWeights {

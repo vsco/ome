@@ -25,7 +25,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -45,7 +45,7 @@ jobs:
 
   build-images:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         component:
@@ -71,9 +71,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -93,7 +90,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.component.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:${{ needs.prepare.outputs.tag }}
@@ -127,7 +124,7 @@ jobs:
 
   publish-helm-charts:
     needs: [prepare, build-images]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -195,7 +192,7 @@ jobs:
 
   generate-sboms:
     needs: [prepare, build-images]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -224,7 +221,7 @@ jobs:
 
   create-release:
     needs: [prepare, build-images, publish-helm-charts, generate-sboms]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

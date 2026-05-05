@@ -1,0 +1,16 @@
+{{- if and .Values.modelAgent.persistence.enabled .Values.modelAgent.persistence.create }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.modelAgent.persistence.claimName }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    {{- range .Values.modelAgent.persistence.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  storageClassName: {{ .Values.modelAgent.persistence.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.modelAgent.persistence.size | quote }}
+{{- end }}

@@ -38,10 +38,16 @@ spec:
         {{- toYaml $imagePullSecrets | nindent 8 }}
       {{- end }}
       volumes:
+{{- if .Values.modelAgent.persistence.enabled }}
+        - name: host-models
+          persistentVolumeClaim:
+            claimName: {{ .Values.modelAgent.persistence.claimName | quote }}
+{{- else }}
         - name: host-models
           hostPath:
             path: {{ .Values.modelAgent.hostPath }}
             type: DirectoryOrCreate
+{{- end }}
         {{- with .Values.modelAgent.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	knapis "knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
@@ -556,24 +557,29 @@ func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta1
 }
 
 func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
-	existingService := &v1beta1.InferenceService{}
-	namespacedName := types.NamespacedName{Name: desiredService.Name, Namespace: desiredService.Namespace}
-	if err := r.Get(context.TODO(), namespacedName, existingService); err != nil {
-		return err
-	}
-	wasReady := inferenceServiceReadiness(existingService.Status)
-	if inferenceServiceStatusEqual(existingService.Status, desiredService.Status) {
-		// If we didn't change anything then don't call updateStatus.
-		// This is important because the copy we loaded from the informer's
-		// cache may be stale, and we don't want to overwrite a prior update
-		// to status with this stale state.
-	} else if err := r.Status().Update(context.TODO(), desiredService); err != nil {
-		r.Log.Error(err, "Failed to update InferenceService status", "InferenceService", desiredService.Name)
-		r.Recorder.Eventf(desiredService, v1.EventTypeWarning, "UpdateFailed",
-			"Failed to update status for InferenceService %q: %v", desiredService.Name, err)
-		return errors.Wrapf(err, "fails to update InferenceService status")
-	} else {
-		// If there was a difference and there was no error.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existingService := &v1beta1.InferenceService{}
+		namespacedName := types.NamespacedName{Name: desiredService.Name, Namespace: desiredService.Namespace}
+		if err := r.Get(context.TODO(), namespacedName, existingService); err != nil {
+			return err
+		}
+		wasReady := inferenceServiceReadiness(existingService.Status)
+		if inferenceServiceStatusEqual(existingService.Status, desiredService.Status) {
+			// If we didn't change anything then don't call updateStatus.
+			// This is important because the copy we loaded from the informer's
+			// cache may be stale, and we don't want to overwrite a prior update
+			// to status with this stale state.
+			return nil
+		}
+		// Apply only status onto the object we just read from the API. desiredService may carry
+		// stale spec/metadata from the reconcile queue while Helm/Flux updated the live object;
+		// Status().Update with mismatched spec+RV can still fail with 409 or other conflicts.
+		existingService.Status = *desiredService.Status.DeepCopy()
+		if err := r.Status().Update(context.TODO(), existingService); err != nil {
+			return err
+		}
+		desiredService.Status = existingService.Status
+		desiredService.ResourceVersion = existingService.ResourceVersion
 		isReady := inferenceServiceReadiness(desiredService.Status)
 		if wasReady && !isReady { // Moved to NotReady State
 			r.Recorder.Eventf(desiredService, v1.EventTypeWarning, string(InferenceServiceNotReadyState),
@@ -582,6 +588,13 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.Infere
 			r.Recorder.Eventf(desiredService, v1.EventTypeNormal, string(InferenceServiceReadyState),
 				fmt.Sprintf("InferenceService [%v] is Ready", desiredService.GetName()))
 		}
+		return nil
+	})
+	if err != nil {
+		r.Log.Error(err, "Failed to update InferenceService status", "InferenceService", desiredService.Name)
+		r.Recorder.Eventf(desiredService, v1.EventTypeWarning, "UpdateFailed",
+			"Failed to update status for InferenceService %q: %v", desiredService.Name, err)
+		return errors.Wrapf(err, "fails to update InferenceService status")
 	}
 	return nil
 }

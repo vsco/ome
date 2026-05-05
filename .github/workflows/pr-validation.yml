@@ -18,7 +18,7 @@ concurrency:
 jobs:
   pre-commit-checks:
     name: Pre-commit Checks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -79,7 +79,7 @@ jobs:
 
   test-and-build:
     name: Test and Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 20
     # Remove dependency so tests always run independently
     steps:
@@ -141,7 +141,7 @@ jobs:
 
   docker-validation:
     name: Docker Build Validation
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     needs: pre-commit-checks
     strategy:
@@ -193,7 +193,7 @@ jobs:
   # Optional multi-arch validation - only runs when 'test-multiarch' label is present
   docker-multiarch-validation:
     name: Docker Multi-Arch Build Validation
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 30
     needs: pre-commit-checks
     if: contains(github.event.pull_request.labels.*.name, 'test-multiarch')
@@ -252,7 +252,7 @@ jobs:
 
   summary:
     name: PR Validation Summary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [pre-commit-checks, test-and-build, docker-validation]
     if: always()
     steps:

@@ -11,6 +11,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 func TestUpdatePodSpecNodeSelector(t *testing.T) {
@@ -22,6 +23,7 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 		baseModelMeta                     *metav1.ObjectMeta
 		fineTunedServingWithMergedWeights bool
 		existingNodeSelector              map[string]string
+		isvcAnnotations                   map[string]string
 		expectedLabelKey                  string
 		expectNodeSelector                bool
 	}{
@@ -91,6 +93,39 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			expectNodeSelector: false,
 		},
 		{
+			name: "Skip model-ready nodeSelector when InferenceService annotation is true",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "my-model",
+				Namespace: "",
+			},
+			isvcAnnotations: map[string]string{
+				constants.SkipModelReadyNodeSelectorAnnotationKey: "true",
+			},
+			expectNodeSelector: false,
+		},
+		{
+			name: "Annotation false still adds model-ready nodeSelector",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "my-model",
+				Namespace: "",
+			},
+			isvcAnnotations: map[string]string{
+				constants.SkipModelReadyNodeSelectorAnnotationKey: "false",
+			},
+			expectedLabelKey:   "models.ome.io/clusterbasemodel.my-model",
+			expectNodeSelector: true,
+		},
+		{
 			name: "Long model names should be handled",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
@@ -128,13 +163,14 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			// Create inference service
 			isvc := &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-isvc",
-					Namespace: "default",
+					Name:        "test-isvc",
+					Namespace:   "default",
+					Annotations: tt.isvcAnnotations,
 				},
 			}
 
 			// Call the function
-			UpdatePodSpecNodeSelector(b, isvc, podSpec, "")
+			UpdatePodSpecNodeSelector(b, isvc, podSpec, v1beta1.EngineComponent)
 
 			// Verify the result
 			if !tt.expectNodeSelector {
@@ -217,4 +253,189 @@ func TestProcessBaseLabels(t *testing.T) {
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.InferenceServiceBaseModelSizeLabelKey, "LARGE"))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel)))
 	g.Expect(labels).To(gomega.HaveKeyWithValue(constants.BaseModelVendorLabelKey, "meta"))
+}
+
+func TestUpdatePodSpecVolumes_PVCAndHostPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				Path: &modelPath,
+			},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		Log:           logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+
+	pod := &v1.PodSpec{}
+	UpdatePodSpecVolumes(b, isvc, pod, &metav1.ObjectMeta{})
+	g.Expect(pod.Volumes).To(gomega.HaveLen(1))
+	g.Expect(pod.Volumes[0].HostPath).NotTo(gomega.BeNil())
+	g.Expect(pod.Volumes[0].HostPath.Path).To(gomega.Equal(modelPath))
+
+	b.InferenceServiceConfig = &controllerconfig.InferenceServicesConfig{
+		ModelStorage: controllerconfig.ModelStorageConfig{
+			PVCClaimName: "ome-models-efs",
+			PVCMountRoot: "/mnt/data/models",
+		},
+	}
+	pod2 := &v1.PodSpec{}
+	UpdatePodSpecVolumes(b, isvc, pod2, &metav1.ObjectMeta{})
+	g.Expect(pod2.Volumes).To(gomega.HaveLen(1))
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim).NotTo(gomega.BeNil())
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim.ClaimName).To(gomega.Equal("ome-models-efs"))
+	g.Expect(pod2.Volumes[0].PersistentVolumeClaim.ReadOnly).To(gomega.BeTrue())
+}
+
+func TestUpdateVolumeMounts_PVCSubPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				Path: &modelPath,
+			},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
+	g.Expect(container.VolumeMounts[0].SubPath).To(gomega.Equal("my-model"))
+}
+
+// Fine-tuned serving with PVC-backed weights skips inject annotations; emptyDir for /opt/ml/model
+// must not be mounted unless adapter/model-init injection requires it (matches UpdatePodSpecVolumes).
+func TestUpdateVolumeMounts_FTWithoutEmptyDirSkipsModelEmptyDirMount(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/qwen3-vl-8b-instruct"
+	b := &BaseComponentFields{
+		FineTunedServing: true,
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "qwen3-vl-8b-instruct"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	ann := map[string]string{
+		constants.BaseModelName: "qwen3-vl-8b-instruct",
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: ann})
+	g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
+	g.Expect(container.VolumeMounts[0].Name).To(gomega.Equal("qwen3-vl-8b-instruct"))
+	for _, vm := range container.VolumeMounts {
+		g.Expect(vm.Name).NotTo(gomega.Equal(constants.ModelEmptyDirVolumeName))
+	}
+}
+
+func TestUpdateVolumeMounts_FTWithInjectAddsModelEmptyDirMount(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	b := &BaseComponentFields{
+		FineTunedServing: true,
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "cluster-model-x"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+	}
+	ann := map[string]string{
+		constants.FineTunedAdapterInjectionKey: "some-adapter",
+	}
+	container := &v1.Container{}
+	UpdateVolumeMounts(b, isvc, container, &metav1.ObjectMeta{Annotations: ann})
+	names := make([]string, 0, len(container.VolumeMounts))
+	for _, vm := range container.VolumeMounts {
+		names = append(names, vm.Name)
+	}
+	g.Expect(names).To(gomega.ContainElement(constants.ModelEmptyDirVolumeName))
+}
+
+func TestUpdateInitContainerBaseModelVolumeMounts_PVCSubPath(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"}}
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "my-model"},
+		InferenceServiceConfig: &controllerconfig.InferenceServicesConfig{
+			ModelStorage: controllerconfig.ModelStorageConfig{
+				PVCClaimName: "ome-models-efs",
+				PVCMountRoot: "/mnt/data/models",
+			},
+		},
+		Log: logr.Discard(),
+	}
+	pod := &v1.PodSpec{
+		InitContainers: []v1.Container{
+			{
+				Name: "wait-for-base-model",
+				VolumeMounts: []v1.VolumeMount{
+					{Name: "my-model", MountPath: modelPath},
+				},
+			},
+		},
+	}
+	UpdateInitContainerBaseModelVolumeMounts(b, isvc, pod, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(pod.InitContainers[0].VolumeMounts[0].SubPath).To(gomega.Equal("my-model"))
+}
+
+func TestUpdateInitContainerBaseModelVolumeMounts_NoPVCNoOp(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	modelPath := "/mnt/data/models/my-model"
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"}}
+	b := &BaseComponentFields{
+		BaseModel: &v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{Path: &modelPath},
+		},
+		BaseModelMeta: &metav1.ObjectMeta{Name: "my-model"},
+		Log:           logr.Discard(),
+	}
+	pod := &v1.PodSpec{
+		InitContainers: []v1.Container{
+			{
+				Name: "wait",
+				VolumeMounts: []v1.VolumeMount{
+					{Name: "my-model", MountPath: modelPath},
+				},
+			},
+		},
+	}
+	UpdateInitContainerBaseModelVolumeMounts(b, isvc, pod, &metav1.ObjectMeta{Annotations: map[string]string{}})
+	g.Expect(pod.InitContainers[0].VolumeMounts[0].SubPath).To(gomega.BeEmpty())
 }

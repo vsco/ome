@@ -12,7 +12,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -45,7 +45,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         test-suite: [unit]  # TODO: Add 'integration' back once fixed
@@ -99,7 +99,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         component: [ome-manager, model-agent, multinode-prober, ome-agent]
@@ -144,7 +144,7 @@ jobs:
 
   docker-build:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
@@ -189,7 +189,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -212,7 +212,7 @@ jobs:
 
   license-check:
     name: License Check
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -233,7 +233,7 @@ jobs:
   all-checks-passed:
     name: All CI Checks Passed
     needs: [lint, test, build, docker-build, security-scan, license-check]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: always()
     steps:
       - name: Check all job statuses

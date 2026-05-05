@@ -78,6 +78,8 @@ data:
       "scalingThreshold": "{{ .Values.ome.kedaConfig.scalingThreshold | default "10" }}",
       "scalingOperator": "{{ .Values.ome.kedaConfig.scalingOperator | default "GreaterThanOrEqual" }}"
     }
+  modelStorage: |-
+{{ (.Values.ome.modelStorage | default dict) | toJson | nindent 4 }}
 ---
 apiVersion: v1
 kind: ConfigMap
